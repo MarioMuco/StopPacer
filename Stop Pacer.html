@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Stop Pacer</title>
+  <style>
+    :root {
+      --bg: #eef1f4;
+      --card: #fff;
+      --ink: #14212b;
+      --mute: #5d6b76;
+      --ok: #0f8a5f;
+      --warn: #c47a00;
+      --bad: #c62f3a;
+      --line: #d5dbe0;
+      --btn: #14212b;
+      --btnink: #fff;
+      box-sizing: border-box;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px)
+    }
+
+    @media (prefers-color-scheme:dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0e151b;
+        --card: #18222b;
+        --ink: #eaf0f4;
+        --mute: #93a1ac;
+        --ok: #3fd49b;
+        --warn: #f0b13a;
+        --bad: #ff6b75;
+        --line: #2b3843;
+        --btn: #eaf0f4;
+        --btnink: #0e151b
+      }
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html {
+      scroll-padding-top: env(safe-area-inset-top, 0px)
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      padding: 16px;
+      max-width: 520px;
+      margin-inline: auto
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 4px 0 14px
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px
+    }
+
+    .row {
+      display: flex;
+      gap: 10px
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--mute);
+      display: block;
+      margin-bottom: 4px
+    }
+
+    input {
+      width: 100%;
+      font-size: 20px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--ink)
+    }
+
+    button {
+      font-size: 18px;
+      font-weight: 600;
+      border: 0;
+      border-radius: 12px;
+      padding: 14px;
+      background: var(--btn);
+      color: var(--btnink);
+      width: 100%
+    }
+
+    button.sec {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      font-size: 15px;
+      padding: 10px
+    }
+
+    .big {
+      font-size: 56px;
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums
+    }
+
+    .sub {
+      color: var(--mute);
+      font-size: 14px;
+      margin-top: 6px
+    }
+
+    .stat {
+      flex: 1
+    }
+
+    .stat b {
+      font-size: 24px;
+      font-variant-numeric: tabular-nums;
+      display: block
+    }
+
+    .bar {
+      height: 10px;
+      border-radius: 5px;
+      background: var(--line);
+      overflow: hidden;
+      margin-top: 12px
+    }
+
+    .bar i {
+      display: block;
+      height: 100%;
+      background: var(--ok);
+      width: 0
+    }
+
+    #tap {
+      font-size: 26px;
+      padding: 28px
+    }
+
+    .hide {
+      display: none
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Stop Pacer</h1>
+
+  <div id="setup" class="card">
+    <div class="row">
+      <div style="flex:1"><label for="n">Total stops</label><input id="n" type="number" inputmode="numeric" value="100">
+      </div>
+      <div style="flex:1"><label for="m">Minutes</label><input id="m" type="number" inputmode="numeric" value="60">
+      </div>
+    </div>
+    <p class="sub" id="plan"></p>
+    <button id="start">Start</button>
+  </div>
+
+  <div id="run" class="hide">
+    <div class="card">
+      <div class="sub">Time per stop from now</div>
+      <div class="big" id="pace">0:00</div>
+      <div class="sub" style="margin-top:14px">Time left for this stop</div>
+      <div class="big" id="cur" style="font-size:40px">0:00</div>
+      <div class="sub" id="status"></div>
+      <div class="bar"><i id="fill"></i></div>
+    </div>
+    <div class="row">
+      <div class="card stat"><span class="sub">Done</span><b id="done">0</b></div>
+      <div class="card stat"><span class="sub">Left</span><b id="left">0</b></div>
+      <div class="card stat"><span class="sub">Time left</span><b id="tl">0:00</b></div>
+    </div>
+    <button id="tap">Stop done</button>
+    <div class="row" style="margin-top:10px">
+      <button class="sec" id="undo">Undo</button>
+      <button class="sec" id="reset">Reset</button>
+    </div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    let total, end, start, done, timer, lastTap, paused = false;
+    const fmt2 = s => {s = Math.max(0, s); const m = Math.floor(s / 60), r = s - m * 60; return m + ":" + (r < 10 ? "0" : "") + r.toFixed(2)};
+    const fmt = s => {s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")};
+    function plan() {const n = +$("n").value, m = +$("m").value; $("plan").textContent = n > 0 && m > 0 ? "Starting pace: " + fmt(m * 60 / n) + " per stop" : ""}
+    $("n").oninput = $("m").oninput = plan; plan();
+    function tick() {
+      const now = Date.now(), rem = (end - now) / 1000, left = total - done;
+      $("done").textContent = done; $("left").textContent = left;
+      $("fill").style.width = (done / total * 100) + "%";
+      if (left <= 0) {$("pace").textContent = "Done"; $("status").textContent = "Finished with " + fmt(Math.max(0, rem)) + " to spare" + (rem < 0 ? " (over time)" : ""); $("tl").textContent = fmt(rem); return }
+      $("tl").textContent = rem >= 0 ? fmt(rem) : "-" + fmt(-rem);
+      if (rem <= 0) {$("pace").textContent = "0:00"; $("status").textContent = "Time is up, " + left + " stops left"; $("pace").style.color = "var(--bad)"; return }
+      const per = rem / left;
+      $("pace").textContent = fmt2(per);
+      const cur = (end - lastTap) / 1000 / left - (now - lastTap) / 1000;
+      $("cur").textContent = (cur < 0 ? "-" : "") + fmt(Math.abs(cur));
+      $("cur").style.color = cur < 0 ? "var(--bad)" : "";
+      const base = (end - start) / 1000 / total;
+      $("pace").style.color = per >= base * 1.0 ? "var(--ok)" : per >= base * 0.8 ? "var(--warn)" : "var(--bad)";
+      $("status").textContent = per >= base ? "On or ahead of plan" : "Behind plan, speed up";
+    }
+    $("start").onclick = () => {
+      total = Math.floor(+$("n").value); const m = +$("m").value;
+      if (!(total > 0 && m > 0)) return;
+      done = 0; start = Date.now(); lastTap = start; end = start + m * 60000;
+      $("setup").classList.add("hide"); $("run").classList.remove("hide");
+      clearInterval(timer); timer = setInterval(tick, 100); tick();
+    };
+    $("tap").onclick = () => {if (done < total) {done++; lastTap = Date.now(); tick(); if (navigator.vibrate) try {navigator.vibrate(30)} catch (e) { } } };
+    $("undo").onclick = () => {if (done > 0) {done--; lastTap = Date.now(); tick()} };
+    $("reset").onclick = () => {clearInterval(timer); $("run").classList.add("hide"); $("setup").classList.remove("hide"); $("pace").style.color = ""};
+  </script>
+</body>
+
+</html>
